@@ -71,3 +71,91 @@ spec:
         pip install flake8
         flake8 $(params.path) --count --ignore=E201,E202,E203,E231,E302,E111,E501 --max-line-length=127 --statistics
         flake8 $(params.path) "${@}"
+
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: buildah-ns
+  namespace: sn-labs-santos321lol
+  annotations:
+    # Enable user namespaces so the container can build as non-root
+    io.kubernetes.cri-o.userns-mode: "auto"
+    io.openshift.builder: "true"
+spec:
+  description: |
+    Build an OCI image without privileged SCC using Buildah rootless mode.
+    Uses user namespaces and chroot isolation to run as a non-root UID.
+  workspaces:
+    - name: source
+      description: Workspace containing Dockerfile/Containerfile and context
+  params:
+    - name: IMAGE
+      type: string
+      description: Full image reference to build and push (e.g., quay.io/ns/app:tag)
+    - name: DOCKERFILE
+      type: string
+      default: ./Dockerfile
+      description: Path to Dockerfile/Containerfile
+    - name: CONTEXT
+      type: string
+      default: .
+      description: Build context directory
+    - name: TLSVERIFY
+      type: string
+      default: "true"
+      description: Verify TLS when pushing/pulling
+    - name: FORMAT
+      type: string
+      default: oci
+      description: Image format (oci or docker)
+    - name: BUILD_ARGS
+      type: array
+      default: []
+      description: Additional build args (key=value)
+  # Run all steps as a non-root UID and disallow privilege escalation
+  stepTemplate:
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+      allowPrivilegeEscalation: false
+  steps:
+    - name: build
+      image: quay.io/buildah/stable:v1
+      workingDir: $(workspaces.source.path)
+      env:
+        # Rootless-friendly isolation on OpenShift
+        - name: BUILDAH_ISOLATION
+          value: chroot
+        # Use VFS storage to avoid fuse in rootless mode (optional but safer on OpenShift)
+        - name: XDG_RUNTIME_DIR
+          value: /tmp
+      script: |
+        #!/usr/bin/env bash
+        set -euxo pipefail
+
+        # Configure rootless storage driver to vfs (avoids fuse/overlay issues)
+        mkdir -p "${HOME}/.config/containers"
+        printf '[storage]\ndriver = "vfs"\n' > "${HOME}/.config/containers/storage.conf"
+
+        ARGS=()
+        for kv in "$@"; do
+          ARGS+=(--build-arg "$kv")
+        done
+
+        # Build the image
+        buildah bud \
+          --format "$(params.FORMAT)" \
+          --tls-verify="$(params.TLSVERIFY)" \
+          -f "$(params.DOCKERFILE)" \
+          -t "$(params.IMAGE)" \
+          "$(params.CONTEXT)" \
+          "${ARGS[@]}"
+
+        # Push the image
+        buildah push \
+          --tls-verify="$(params.TLSVERIFY)" \
+          "$(params.IMAGE)"
+      args:
+        - "$(params.BUILD_ARGS[*])"
+

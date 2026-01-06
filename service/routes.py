@@ -1,12 +1,10 @@
-"""
-Controller for routes
-"""
+
+"""Controller for routes"""
 from flask import jsonify, url_for, abort
 from service import app
 from service.common import status
 
 COUNTER = {}
-
 
 ############################################################
 # Health Endpoint
@@ -16,13 +14,12 @@ def health():
     """Health Status"""
     return jsonify(dict(status="OK")), status.HTTP_200_OK
 
-
 ############################################################
 # Index page
 ############################################################
 @app.route("/")
 def index():
-    """Returns information abut the service"""
+    """Returns information about the service"""
     app.logger.info("Request for Base URL")
     return jsonify(
         status=status.HTTP_200_OK,
@@ -31,7 +28,6 @@ def index():
         url=url_for("list_counters", _external=True),
     )
 
-
 ############################################################
 # List counters
 ############################################################
@@ -39,14 +35,11 @@ def index():
 def list_counters():
     """Lists all counters"""
     app.logger.info("Request to list all counters...")
-
     counters = [dict(name=count[0], counter=count[1]) for count in COUNTER.items()]
-
     return jsonify(counters)
 
-
 ############################################################
-# Create counters
+# Create counter
 ############################################################
 @app.route("/counters/<name>", methods=["POST"])
 def create_counters(name):
@@ -57,7 +50,6 @@ def create_counters(name):
         return abort(status.HTTP_409_CONFLICT, f"Counter {name} already exists")
 
     COUNTER[name] = 0
-
     location_url = url_for("read_counters", name=name, _external=True)
     return (
         jsonify(name=name, counter=0),
@@ -65,9 +57,8 @@ def create_counters(name):
         {"Location": location_url},
     )
 
-
 ############################################################
-# Read counters
+# Read counter
 ############################################################
 @app.route("/counters/<name>", methods=["GET"])
 def read_counters(name):
@@ -80,9 +71,8 @@ def read_counters(name):
     counter = COUNTER[name]
     return jsonify(name=name, counter=counter)
 
-
 ############################################################
-# Update counters
+# Update counter
 ############################################################
 @app.route("/counters/<name>", methods=["PUT"])
 def update_counters(name):
@@ -90,16 +80,14 @@ def update_counters(name):
     app.logger.info("Request to Update counter: %s...", name)
 
     if name not in COUNTER:
-    return abort(status.HTTP_404_NOT_FOUND, f"Counter {name} does not exist")
+        return abort(status.HTTP_404_NOT_FOUND, f"Counter {name} does not exist")
 
     COUNTER[name] += 1
-
     counter = COUNTER[name]
     return jsonify(name=name, counter=counter)
 
-
 ############################################################
-# Delete counters
+# Delete counter
 ############################################################
 @app.route("/counters/<name>", methods=["DELETE"])
 def delete_counters(name):
@@ -110,7 +98,6 @@ def delete_counters(name):
         COUNTER.pop(name)
 
     return "", status.HTTP_204_NO_CONTENT
-
 
 ############################################################
 # Utility for testing

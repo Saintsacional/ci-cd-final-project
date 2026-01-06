@@ -39,7 +39,7 @@ spec:
   steps:
     - name: clone
       image: docker.io/alpine/git:latest
-      workingDir: $(workspaces.output.path)
+      workingDir: $(workspaces.source.path)
       script: |
         #!/usr/bin/env sh
         set -eux
@@ -53,13 +53,13 @@ spec:
 # flake8
 # ---------------------------
 
-apiVersion: tekton.dev/v1beta1
+
+rsion: tekton.dev/v1beta1
 kind: Task
 metadata:
   name: flake8
   namespace: sn-labs-santos321lol
 spec:
-  description: Run flake8 linter on the repo.
   workspaces:
     - name: source
   params:
@@ -75,7 +75,6 @@ spec:
     - name: lint
       image: python:3.9-slim
       workingDir: $(workspaces.source.path)
-      # Pass Tekton array param to the container as step arguments
       args:
         - "$(params.args[*])"
       script: |
@@ -84,13 +83,8 @@ spec:
         python -m pip install --upgrade pip setuptools wheel
         pip install -r requirements.txt -vv
         pip install flake8
-
-        # strict errors first
         flake8 "$(params.path)" --count --select=E9,F63,F7,F82 --show-source --statistics
-
-        # second run consumes args supplied via Tekton 'args:' → available as "$@"
         flake8 "$(params.path)" "$@"
-
 
 ---
 # ---------------------------

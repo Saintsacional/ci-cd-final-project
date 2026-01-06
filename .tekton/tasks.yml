@@ -38,7 +38,7 @@ spec:
         set -euxo pipefail
         python -m pip install --upgrade pip setuptools wheel
         pip install -r requirements.txt -vv
-        pip install nose coverage nose-spec
+        pip install nose coverage 
         nosetests $(params.args)
 
 ---

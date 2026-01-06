@@ -66,7 +66,7 @@ def read_counters(name):
     app.logger.info("Request to Read counter: %s...", name)
 
     if name not in COUNTER:
-        return abort(status.HTTP_404_NOT_FOUND, f"Counter {name} does not exist")
+      return abort(status.HTTP_404_NOT_FOUND, f"Counter {name} does not exist")
 
     counter = COUNTER[name]
     return jsonify(name=name, counter=counter)
@@ -74,13 +74,14 @@ def read_counters(name):
 ############################################################
 # Update counter
 ############################################################
+
 @app.route("/counters/<name>", methods=["PUT"])
 def update_counters(name):
     """Updates a counter"""
     app.logger.info("Request to Update counter: %s...", name)
 
     if name not in COUNTER:
-        return abort(status.HTTP_404_NOT_FOUND, f"Counter {name} does not exist")
+      return abort(status.HTTP_404_NOT_FOUND, f"Counter {name} does not exist")
 
     COUNTER[name] += 1
     counter = COUNTER[name]
@@ -89,6 +90,7 @@ def update_counters(name):
 ############################################################
 # Delete counter
 ############################################################
+
 @app.route("/counters/<name>", methods=["DELETE"])
 def delete_counters(name):
     """Deletes a counter"""
@@ -102,6 +104,7 @@ def delete_counters(name):
 ############################################################
 # Utility for testing
 ############################################################
+
 def reset_counters():
     """Removes all counters while testing"""
     global COUNTER  # pylint: disable=global-statement

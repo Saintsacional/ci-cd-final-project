@@ -75,35 +75,80 @@ spec:
 ---
 
 
+
 apiVersion: tekton.dev/v1beta1
 kind: Task
 metadata:
   name: buildah
   namespace: sn-labs-santos321lol
-
 spec:
-  workspaces: [{ name: source }]
+  description: |
+    Build OCI images on OpenShift under restricted SCC without privilege.
+    Disables user namespaces (userns="host"), uses chroot isolation and VFS storage.
+  workspaces:
+    - name: source
   params:
-    - { name: IMAGE, type: string }
-    - { name: DOCKERFILE, type: string, default: ./Dockerfile }
-    - { name: CONTEXT, type: string, default: . }
-    - { name: TLSVERIFY, type: string, default: "true" }
-    - { name: FORMAT, type: string, default: oci }
+    - name: IMAGE
+      type: string
+    - name: DOCKERFILE
+      type: string
+      default: ./Dockerfile
+    - name: CONTEXT
+      type: string
+      default: .
+    - name: TLSVERIFY
+      type: string
+      default: "true"
+    - name: FORMAT
+      type: string
+      default: oci
+    - name: BUILD_ARGS
+      type: array
+      default: []
   stepTemplate:
     securityContext:
-      runAsUser: 0              # root in-container (allowed by pipelines-scc), not privileged
+      runAsUser: 0
+      runAsNonRoot: false
       allowPrivilegeEscalation: false
   steps:
     - name: build
       image: quay.io/buildah/stable:v1
       workingDir: $(workspaces.source.path)
       env:
-        - { name: BUILDAH_ISOLATION, value: chroot }  # OpenShift-friendly
-        - { name: XDG_RUNTIME_DIR, value: /tmp }
+        - name: BUILDAH_ISOLATION
+          value: chroot
+        - name: XDG_RUNTIME_DIR
+          value: /tmp
       script: |
+        #!/usr/bin/env bash
         set -euxo pipefail
+
+        # Configure VFS storage (rootless-friendly, avoids fuse/overlay)
         mkdir -p "${HOME}/.config/containers"
         printf '[storage]\ndriver = "vfs"\n' > "${HOME}/.config/containers/storage.conf"
-        buildah bud --format "$(params.FORMAT)" --tls-verify="$(params.TLSVERIFY)" \
-          -f "$(params.DOCKERFILE)" -t "$(params.IMAGE)" "$(params.CONTEXT)"
-        buildah push --tls-verify="$(params.TLSVERIFY)" "$(params.IMAGE)"
+
+        # Disable user-namespaces for all containers/tools
+        mkdir -p /etc/containers
+        printf '[containers]\nuserns="host"\n' > /etc/containers/containers.conf
+
+        # Map build args
+        ARGS=()
+        for kv in "$@"; do ARGS+=(--build-arg "$kv"); done
+
+        # Build with explicit userns=host (belt-and-suspenders)
+        buildah bud \
+          --userns=host \
+          --format "$(params.FORMAT)" \
+          --tls-verify="$(params.TLSVERIFY)" \
+          -f "$(params.DOCKERFILE)" \
+          -t "$(params.IMAGE)" \
+          "$(params.CONTEXT)" \
+          "${ARGS[@]}"
+
+        # Push
+        buildah push \
+          --userns=host \
+          --tls-verify="$(params.TLSVERIFY)" \
+          "$(params.IMAGE)"
+      args:
+        - "$(params.BUILD_ARGS[*])"

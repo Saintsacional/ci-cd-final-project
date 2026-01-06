@@ -1,0 +1,114 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  creationTimestamp: '2026-01-06T09:33:00Z'
+  generation: 3
+  managedFields:
+    - apiVersion: tekton.dev/v1
+      fieldsType: FieldsV1
+      fieldsV1:
+        'f:spec':
+          .: {}
+          'f:description': {}
+          'f:params': {}
+          'f:tasks': {}
+          'f:workspaces': {}
+      manager: Mozilla
+      operation: Update
+      time: '2026-01-06T14:43:52Z'
+  name: output
+  namespace: sn-labs-santos321lol
+  resourceVersion: '2577517954'
+  uid: 9ef30a74-18d1-40b0-8a0a-553fef4a4319
+spec:
+  description: 'Cleanup, clone, lint, test, build image, then deploy to OpenShift.'
+  params:
+    - name: repo-url
+      type: string
+    - name: app-name
+      type: string
+    - name: build-image
+      type: string
+  tasks:
+    - name: cleanup
+      taskRef:
+        kind: Task
+        name: cleanup
+      workspaces:
+        - name: source
+          workspace: output
+    - name: git-clone
+      params:
+        - name: url
+          value: $(params.repo-url)
+      runAfter:
+        - cleanup
+      taskRef:
+        kind: Task
+        name: git-clone
+      workspaces:
+        - name: output
+          workspace: output
+    - name: flake8
+      params:
+        - name: path
+          value: service
+        - name: args
+          value:
+            - '--max-line-length=127'
+            - '--statistics'
+      runAfter:
+        - git-clone
+      taskRef:
+        kind: Task
+        name: flake8
+      workspaces:
+        - name: source
+          workspace: output
+    - name: nose
+      params:
+        - name: args
+          value: '-v --with-spec --spec-color --with-coverage --cover-package=app'
+      runAfter:
+        - flake8
+      taskRef:
+        kind: Task
+        name: nose
+      workspaces:
+        - name: source
+          workspace: output
+    - name: buildah
+      params:
+        - name: IMAGE
+          value: $(params.build-image)
+        - name: DOCKERFILE
+          value: ./Dockerfile
+        - name: CONTEXT
+          value: .
+        - name: TLSVERIFY
+          value: 'true'
+        - name: FORMAT
+          value: oci
+      runAfter:
+        - nose
+      taskRef:
+        kind: Task
+        name: buildah
+      workspaces:
+        - name: source
+          workspace: output
+    - name: deploy
+      params:
+        - name: SCRIPT
+          value: |
+            set -e
+            oc create deployment $(params.app-name) --image=$(params.build-image) --dry-run=client -o yaml | oc apply -f -
+            # oc expose deployment $(params.app-name) --port=8080
+      runAfter:
+        - buildah
+      taskRef:
+        kind: Task
+        name: openshift-client
+  workspaces:
+    - description: Shared workspace for source/artifacts/image context.
+      name: output

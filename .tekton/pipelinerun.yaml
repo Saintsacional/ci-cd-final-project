@@ -1,0 +1,41 @@
+
+# .tekton/pipelinerun.yaml
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  generateName: app-ci-run-
+  namespace: sn-labs-santos321lol
+spec:
+  pipelineRef:
+    name: output
+  serviceAccountName: pipeline
+
+  # Make the mounted PVC group-writable
+  podTemplate:
+    securityContext:
+      fsGroup: 0
+
+  params:
+    - name: repo-url
+      value: "https://github.com/Saintsacional/ci-cd-final-project.git"
+    - name: app-name
+      value: "myapp"
+    - name: build-image
+      value: "quay.io/sn-labs-santos321lol/myapp:latest"
+
+  workspaces:
+    - name: output
+      persistentVolumeClaim:
+        claimName: oc-lab-pvc
+
+  # Override ONLY the buildah pipeline task to disable pod userns and run as root (non-privileged)
+  taskRunSpecs:
+    - pipelineTaskName: buildah
+      serviceAccountName: pipeline
+      podTemplate:
+        annotations:
+          io.kubernetes.cri-o.userns-mode: "host"   # disable pod-level user namespace
+        securityContext:
+          runAsUser: 0
+          runAsNonRoot: false
+          allowPrivilegeEscalation: false
